@@ -12,7 +12,7 @@ This script takes advantage of three modules.
 ## Usage
 Simply run the script and i'll walk you through setting up the configuration.
 
-`perl panda-saver`
+`perl panda-saver.pl`
 
 Or, you can provide arguments for the configuration.
 
