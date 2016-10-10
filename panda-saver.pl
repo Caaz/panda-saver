@@ -3,7 +3,9 @@ use warnings;
 use strict;
 
 use WebService::Pandora;
+use WebService::Pandora::Partner::Android;
 use MP3::Tag;
+use MP3::Info;
 use LWP::Simple;
 
 my %config = ();
@@ -45,6 +47,10 @@ sub save($) {
       print "\e[94mSaving $config{downloading}\e[39m\n";
       getstore($track->{audioUrl},$config{downloading});
       writeTags($track,$config{downloading});
+      my $info = get_mp3info($config{downloading});
+      print "\e[92mSaved. Waiting $info->{SECS} seconds to simulate actually playing the track.\e[39m\n";
+      sleep $info->{SECS};
+
       # system('notify-send','Panda','Downloaded '.$track->{songName}.' by '.$track->{artistName});
     }
   }
@@ -56,7 +62,11 @@ for my $key (@config_keys) { $config{$key} = getInput("$key: ") if(!$config{$key
 $config{directory} =~ s/\/$//gs;
 touchDir($config{directory});
 # Login
-my $pandora = WebService::Pandora->new( username => $config{email}, password => $config{password} );
+my $pandora = WebService::Pandora->new(
+  username => $config{email},
+  password => $config{password},
+  partner => WebService::Pandora::Partner::Android->new()
+);
 $pandora->login() or die( $pandora->error() );
 # Get Station List
 my $result = $pandora->getStationList();
@@ -72,6 +82,11 @@ while(!$config{station}) {
 # Get playlist from station choice
 while() {
   $result = $pandora->getPlaylist( stationToken => $stations[$config{station}]->{stationToken} );
-  die $pandora->error() if ( !$result );
-  foreach my $track ( @{$result->{'items'}} ) { save($track); }
+  if ( !$result ) {
+    warn $pandora->error();
+    print "Waiting A minute...\n";
+    sleep 60;
+  } else {
+    foreach my $track ( @{$result->{'items'}} ) { save($track); }
+  }
 }
