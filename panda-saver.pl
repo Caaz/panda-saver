@@ -37,10 +37,14 @@ sub save($) {
     touchDir(join "/", ($config{directory},$track->{artistName},$track->{albumName}));
     my $extension = $track->{audioUrl};
     $extension =~ s/^.*(\.[^.]{3})\?.*$/$1/gs;
-    $config{downloading} = (join "/", ($config{directory},$track->{artistName},$track->{albumName},$track->{songName}.$extension));
-    print "\e[94mSaving $config{downloading}\e[39m\n";
-    getstore($track->{audioUrl},$config{downloading});
-    writeTags($track,$config{downloading});
+    my $filename = $track->{songName}.$extension;
+    $filename =~ s/\//_/g;
+    $config{downloading} = (join "/", ($config{directory},$track->{artistName},$track->{albumName},$filename));
+    if(!-e $config{downloading}) {
+      print "\e[94mSaving $config{downloading}\e[39m\n";
+      getstore($track->{audioUrl},$config{downloading});
+      writeTags($track,$config{downloading});
+    }
   }
 }
 foreach('ABRT','QUIT','KILL','INT','ABRT','HUP') { $SIG{$_} = \&fall; }
