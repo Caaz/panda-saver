@@ -1,56 +1,40 @@
 #!/usr/bin/perl
 use warnings;
 use strict;
-
 use WebService::Pandora;
 use WebService::Pandora::Partner::Android;
 use MP3::Tag;
 use MP3::Info;
 use LWP::Simple;
-MP3::Tag->config(
-  write_v24 => 'TRUE'
-);
+MP3::Tag->config(write_v24 => 'TRUE');
 my %config = ();
 my @config_keys = ('directory','email','password');
-
 sub getInput($) { print "\e[33m$_[0]\e[39m"; my $i; chomp($i = <STDIN>); return $i; }
 sub stringifyArray($) { return '['.(join ", ", @{$_[0]}).']'; }
 sub touchDir($) { if(!-e $_[0]) { print "\e[90mCreating directory: $_[0]\e[39m\n"; mkdir($_[0]) or die $!; } }
-sub sanitize { my $text = shift; $text =~ s/[\/&]/_/gs; return $text; }
+sub sanitize($) { my $text = shift; $text =~ s/[\/&]/_/gs; return $text; }
 sub fall {
-  if($config{downloading}) { print "\e[91m\nRemoving partial file: $config{downloading}\e[39m"; unlink($config{downloading}); }
-  print "\n";
-  exit 0;
+  if($config{downloading}) { print "\n\e[91m\nRemoving partial: $config{downloading}\e[39m"; unlink($config{downloading}); }
+  print "\n" and exit 0;
 }
-sub writeTags {
+sub writeTags( $ $ ) {
   my $track = shift;
   my $mp3 = MP3::Tag->new(shift);
   $mp3->new_tag("ID3v2");
-  $mp3->update_tags({
-    title => $track->{trackName},
-    artist => $track->{artistName},
-    album => $track->{albumName},
-  });
+  $mp3->update_tags({title => $track->{trackName}, artist => $track->{artistName}, album => $track->{albumName},});
   $mp3->close();
 }
 sub countdown( $ $ ) {
-  #countdown(seconds);
-  my ($duration,$text) = @_;
-  my $end_time = time + $duration;
-  my $time = time;
-  while ($time < $end_time) {
-    $time = time;
-    printf("\r\e[90m%s %02d:%02d:%02d.\e[39m", $text, ($end_time - $time) / (60*60), ($end_time - $time) / (60) % 60, ($end_time - $time) % 60);
-    $|++;
-    sleep 1;
+  my ($end,$text) = (time + shift,shift);
+  for(my $r = $end - time; $r > 0; sleep(1) and $r = ($end - time)) {
+    printf("\r\e[90m%s %02d:%02d:%02d\e[39m", $text, $r / (60*60), $r / (60) % 60, $r % 60) and $|++;
   }
-  print "\r"; $|++;
+  print "\r" and $|++;
 }
 sub waitFor( $ $ $ ) {
-  my ($file,$offset,$text) = @_;
-  my $info = get_mp3info($file);
-  my $waitTime = $info->{SECS}-$offset;
-  if($waitTime > 0) { countdown($waitTime, $text); }
+  my $info = get_mp3info(shift);
+  my $waitTime = $info->{SECS}-shift;
+  countdown($waitTime, shift) if($waitTime > 0);
 }
 sub save($) {
   my $track = $_[0];
@@ -79,24 +63,17 @@ sub save($) {
     waitFor($file,$offset,$text);
   }
 }
-sub login($) {
-  my %c = %{$_[0]};
-  my $p = WebService::Pandora->new(
-    username => $c{email},
-    password => $c{password},
-    # partner => WebService::Pandora::Partner::Android->new()
-  );
-  $p->login() or die( $p->error() );
-  return $p;
+sub login() {
+  my $p = WebService::Pandora->new(username => $config{email}, password => $config{password});
+  $p->login() or die( $p->error() ); return $p;
 }
 foreach('ABRT','QUIT','KILL','INT','ABRT','HUP') { $SIG{$_} = \&fall; }
 # Set configuration
 for(my $i = 0; $i < @ARGV; $i++){ $config{$config_keys[$i]} = $ARGV[$i]; }
 for my $key (@config_keys) { $config{$key} = getInput("$key: ") if(!$config{$key}); }
-$config{directory} =~ s/\/$//gs;
-touchDir($config{directory});
+$config{directory} =~ s/\/$//gs; touchDir($config{directory});
 # Login
-my $pandora = login(\%config);
+my $pandora = login();
 # Get Station List
 my $result = $pandora->getStationList();
 die( $pandora->error() ) if ( !$result );
@@ -113,9 +90,7 @@ while() {
   $result = $pandora->getPlaylist( stationToken => $stations[$config{station}]->{stationToken} );
   if ( !$result ) {
     my $error = $pandora->error();
-    if($error =~ /error 13\:/) {
-      print "Bad sync time! Attempting to re-log in.\n";
-      $pandora = login(\%config);
-    } else { die $error; }
+    if($error =~ /error 13\:/) { warn "Bad sync time! Attempting to re-log in.\n"; $pandora = login(); }
+    else { die $error; }
   } else { foreach my $track ( @{$result->{'items'}} ) { save($track); } }
 }
