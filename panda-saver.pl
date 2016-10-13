@@ -22,13 +22,18 @@ sub fall {
 sub writeTags {
   my $track = shift;
   my $mp3 = MP3::Tag->new(shift);
-  $mp3->new_tag("ID3v1");
-  if (exists $mp3->{ID3v1}) {
-    $mp3->{ID3v1}->title($track->{songName});
-    $mp3->{ID3v1}->artist($track->{artistName});
-    $mp3->{ID3v1}->album($track->{albumName});
-    $mp3->{ID3v1}->write_tag();
-  }
+  $mp3->new_tag("ID3v2");
+  # if (exists $mp3->{ID3v1}) {
+  #   $mp3->{ID3v1}->title($track->{songName});
+  #   $mp3->{ID3v1}->artist($track->{artistName});
+  #   $mp3->{ID3v1}->album($track->{albumName});
+  #   $mp3->{ID3v1}->write_tag();
+  # }
+  $mp3->update_tags({
+    title => $track->{trackName},
+    artist => $track->{artistName},
+    album => $track->{albumName},
+  });
   $mp3->close();
 }
 sub countdown( $ $ ) {
@@ -38,7 +43,7 @@ sub countdown( $ $ ) {
   my $time = time;
   while ($time < $end_time) {
     $time = time;
-    printf("\r\e[92m%s Waiting %02d:%02d:%02d.\e[39m", $text, ($end_time - $time) / (60*60), ($end_time - $time) / (60) % 60, ($end_time - $time) % 60);
+    printf("\r\e[37m%s Waiting %02d:%02d:%02d.\e[39m", $text, ($end_time - $time) / (60*60), ($end_time - $time) / (60) % 60, ($end_time - $time) % 60);
     $|++;
     sleep 1;
   }
@@ -57,18 +62,19 @@ sub save($) {
     $filename = sanitize($filename);
     $config{downloading} = (join "/", ($config{directory},$folders[0],$folders[1],$filename));
     if(!-e $config{downloading}) {
-      print "\e[94mSaving $config{downloading}\e[39m\n";
+      print "\r\e[94mSaving $config{downloading}\e[39m"; $|++;
       my $started = time;
       getstore($track->{audioUrl},$config{downloading});
+      print "\r\e[92mSaved: $config{downloading}\e[39m\n"; $|++;
       writeTags($track,$config{downloading});
       my $info = get_mp3info($config{downloading});
       delete $config{downloading};
       my $waitTime = $info->{SECS}-(time-$started);
-      if($waitTime > 0) { countdown($waitTime, "Saved."); }
+      if($waitTime > 0) { countdown($waitTime, "Cooling Down..."); }
     } else {
       my $info = get_mp3info($config{downloading});
       delete $config{downloading};
-      countdown($info->{SECS}, "Skipping.");
+      countdown($info->{SECS}, "Skipping $track->{songName} by $track->{artistName}...");
     }
   }
 }
