@@ -105,7 +105,7 @@ for (my $i = 0; $i < @stations; $i++) { print "$i: \e[36m$stations[$i]->{station
 # Choose a station
 while(!$config{station}) {
   my $choice = getInput("Choose a station by number: ");
-  if(($choice > 0) && ($choice < @stations)) { $config{station} = $choice; }
+  if(($choice >= 0) && ($choice < @stations)) { $config{station} = $choice; }
   else { print "Invalid Selection.\n"; }
 }
 # Get playlist from station choice
