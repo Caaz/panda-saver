@@ -18,19 +18,14 @@ sub stringifyArray($) { return '['.(join ", ", @{$_[0]}).']'; }
 sub touchDir($) { if(!-e $_[0]) { print "\e[90mCreating directory: $_[0]\e[39m\n"; mkdir($_[0]) or die $!; } }
 sub sanitize { my $text = shift; $text =~ s/[\/&]/_/gs; return $text; }
 sub fall {
-  if($config{downloading}) { print "\e[91m\nRemoving partial file: $config{downloading}\e[39m\n"; unlink($config{downloading}); }
+  if($config{downloading}) { print "\e[91m\nRemoving partial file: $config{downloading}\e[39m"; unlink($config{downloading}); }
+  print "\n";
   exit 0;
 }
 sub writeTags {
   my $track = shift;
   my $mp3 = MP3::Tag->new(shift);
   $mp3->new_tag("ID3v2");
-  # if (exists $mp3->{ID3v1}) {
-  #   $mp3->{ID3v1}->title($track->{songName});
-  #   $mp3->{ID3v1}->artist($track->{artistName});
-  #   $mp3->{ID3v1}->album($track->{albumName});
-  #   $mp3->{ID3v1}->write_tag();
-  # }
   $mp3->update_tags({
     title => $track->{trackName},
     artist => $track->{artistName},
@@ -51,6 +46,12 @@ sub countdown( $ $ ) {
   }
   print "\r"; $|++;
 }
+sub waitFor( $ $ $ ) {
+  my ($file,$offset,$text) = @_;
+  my $info = get_mp3info($file);
+  my $waitTime = $info->{SECS}-$offset;
+  if($waitTime > 0) { countdown($waitTime, $text); }
+}
 sub save($) {
   my $track = $_[0];
   if($track->{audioUrl} && $track->{songName} && $track->{artistName} && $track->{albumName}) {
@@ -63,21 +64,21 @@ sub save($) {
     my $filename = $track->{songName}.$extension;
     $filename = sanitize($filename);
     $config{downloading} = (join "/", ($config{directory},$folders[0],$folders[1],$filename));
+    my $file = $config{downloading};
+    my $offset = 0;
+    my $text = "Waiting...";
     if(!-e $config{downloading}) {
-      print "\r\e[94mSaving $config{downloading}\e[39m"; $|++;
+      print "\r\e[32mSaving $config{downloading}\e[39m"; $|++;
       my $started = time;
       getstore($track->{audioUrl},$config{downloading});
       print "\r\e[92mSaved: $config{downloading}\e[39m\n"; $|++;
       writeTags($track,$config{downloading});
-      my $info = get_mp3info($config{downloading});
-      delete $config{downloading};
-      my $waitTime = $info->{SECS}-(time-$started);
-      if($waitTime > 0) { countdown($waitTime, "Cooling Down..."); }
+      $offset = (time-$started);
     } else {
-      my $info = get_mp3info($config{downloading});
-      delete $config{downloading};
-      countdown($info->{SECS}, "Skipping $track->{songName} by $track->{artistName}...");
+      $text = "Skipping $track->{songName} by $track->{artistName}...";
     }
+    delete $config{downloading};
+    waitFor($file,$offset,$text);
   }
 }
 sub login($) {
@@ -115,13 +116,8 @@ while() {
   if ( !$result ) {
     my $error = $pandora->error();
     if($error =~ /error 13\:/) {
-      # Connectivity / Bad Sync Time.
       print "Bad sync time! Attempting to re-log in.\n";
       $pandora = login(\%config);
-    } else {
-      die $error;
-    }
-  } else {
-    foreach my $track ( @{$result->{'items'}} ) { save($track); }
-  }
+    } else { die $error; }
+  } else { foreach my $track ( @{$result->{'items'}} ) { save($track); } }
 }
