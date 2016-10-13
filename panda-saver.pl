@@ -31,6 +31,19 @@ sub writeTags {
   }
   $mp3->close();
 }
+sub countdown($) {
+    #countdown(seconds);
+    my ($duration) = @_;
+    my $end_time = time + $duration;
+    my $time = time;
+    while ($time < $end_time) {
+        $time = time;
+        printf("\r%02d:%02d:%02d", ($end_time - $time) / (60*60), ($end_time - $time) / (60) % 60,($end_time - $time) % 60); #00:00:10
+        $|++;
+        sleep 1;
+    }
+    print "\n"
+}
 sub save($) {
   my $track = $_[0];
   if($track->{audioUrl} && $track->{songName} && $track->{artistName} && $track->{albumName}) {
@@ -48,10 +61,9 @@ sub save($) {
       getstore($track->{audioUrl},$config{downloading});
       writeTags($track,$config{downloading});
       my $info = get_mp3info($config{downloading});
-      print "\e[92mSaved. Waiting $info->{SECS} seconds to simulate actually playing the track.\e[39m\n";
-      sleep $info->{SECS};
-
-      # system('notify-send','Panda','Downloaded '.$track->{songName}.' by '.$track->{artistName});
+      delete $config{downloading};
+      print "\e[92mSaved. Waiting $info->{MM} minutes $info->{SS} seconds to simulate playing the track.\e[39m\n";
+      countdown($info->{SECS});
     }
   }
 }
@@ -65,7 +77,7 @@ touchDir($config{directory});
 my $pandora = WebService::Pandora->new(
   username => $config{email},
   password => $config{password},
-  partner => WebService::Pandora::Partner::Android->new()
+  # partner => WebService::Pandora::Partner::Android->new()
 );
 $pandora->login() or die( $pandora->error() );
 # Get Station List
@@ -83,9 +95,7 @@ while(!$config{station}) {
 while() {
   $result = $pandora->getPlaylist( stationToken => $stations[$config{station}]->{stationToken} );
   if ( !$result ) {
-    warn $pandora->error();
-    print "Waiting A minute...\n";
-    sleep 60;
+    die $pandora->error();
   } else {
     foreach my $track ( @{$result->{'items'}} ) { save($track); }
   }
