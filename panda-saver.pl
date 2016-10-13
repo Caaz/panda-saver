@@ -32,17 +32,17 @@ sub writeTags {
   $mp3->close();
 }
 sub countdown($) {
-    #countdown(seconds);
-    my ($duration) = @_;
-    my $end_time = time + $duration;
-    my $time = time;
-    while ($time < $end_time) {
-        $time = time;
-        printf("\r%02d:%02d:%02d", ($end_time - $time) / (60*60), ($end_time - $time) / (60) % 60,($end_time - $time) % 60); #00:00:10
-        $|++;
-        sleep 1;
-    }
-    print "\n"
+  #countdown(seconds);
+  my ($duration) = @_;
+  my $end_time = time + $duration;
+  my $time = time;
+  while ($time < $end_time) {
+    $time = time;
+    printf("\r\e[92mSaved. Waiting %02d:%02d:%02d to simulate playing the track.\e[39m", ($end_time - $time) / (60*60), ($end_time - $time) / (60) % 60, ($end_time - $time) % 60);
+    $|++;
+    sleep 1;
+  }
+  print "\n";
 }
 sub save($) {
   my $track = $_[0];
@@ -58,14 +58,27 @@ sub save($) {
     $config{downloading} = (join "/", ($config{directory},$folders[0],$folders[1],$filename));
     if(!-e $config{downloading}) {
       print "\e[94mSaving $config{downloading}\e[39m\n";
+      my $started = time;
       getstore($track->{audioUrl},$config{downloading});
       writeTags($track,$config{downloading});
       my $info = get_mp3info($config{downloading});
       delete $config{downloading};
-      print "\e[92mSaved. Waiting $info->{MM} minutes $info->{SS} seconds to simulate playing the track.\e[39m\n";
-      countdown($info->{SECS});
+      my $waitTime = $info->{SECS}-(time-$started);
+      if($waitTime > 0) {
+        countdown($waitTime);
+      }
     }
   }
+}
+sub login($) {
+  my %c = %{$_[0]};
+  my $p = WebService::Pandora->new(
+    username => $c{email},
+    password => $c{password},
+    # partner => WebService::Pandora::Partner::Android->new()
+  );
+  $p->login() or die( $p->error() );
+  return $p;
 }
 foreach('ABRT','QUIT','KILL','INT','ABRT','HUP') { $SIG{$_} = \&fall; }
 # Set configuration
@@ -74,12 +87,7 @@ for my $key (@config_keys) { $config{$key} = getInput("$key: ") if(!$config{$key
 $config{directory} =~ s/\/$//gs;
 touchDir($config{directory});
 # Login
-my $pandora = WebService::Pandora->new(
-  username => $config{email},
-  password => $config{password},
-  # partner => WebService::Pandora::Partner::Android->new()
-);
-$pandora->login() or die( $pandora->error() );
+my $pandora = login(\%config);
 # Get Station List
 my $result = $pandora->getStationList();
 die( $pandora->error() ) if ( !$result );
@@ -95,7 +103,14 @@ while(!$config{station}) {
 while() {
   $result = $pandora->getPlaylist( stationToken => $stations[$config{station}]->{stationToken} );
   if ( !$result ) {
-    die $pandora->error();
+    my $error = $pandora->error();
+    print $pandora->error();
+    if($error =~ /error 13\:/) {
+      # Connectivity / Bad Sync Time.
+      print "Bad sync time! Attempting to re-log in.\n";
+      $pandora = login(\%config);
+    }
+    exit;
   } else {
     foreach my $track ( @{$result->{'items'}} ) { save($track); }
   }
