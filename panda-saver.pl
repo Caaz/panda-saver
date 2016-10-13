@@ -31,18 +31,18 @@ sub writeTags {
   }
   $mp3->close();
 }
-sub countdown($) {
+sub countdown( $ $ ) {
   #countdown(seconds);
-  my ($duration) = @_;
+  my ($duration,$text) = @_;
   my $end_time = time + $duration;
   my $time = time;
   while ($time < $end_time) {
     $time = time;
-    printf("\r\e[92mSaved. Waiting %02d:%02d:%02d to simulate playing the track.\e[39m", ($end_time - $time) / (60*60), ($end_time - $time) / (60) % 60, ($end_time - $time) % 60);
+    printf("\r\e[92m%s Waiting %02d:%02d:%02d.\e[39m", $text, ($end_time - $time) / (60*60), ($end_time - $time) / (60) % 60, ($end_time - $time) % 60);
     $|++;
     sleep 1;
   }
-  print "\n";
+  print "\r"; $|++;
 }
 sub save($) {
   my $track = $_[0];
@@ -64,9 +64,11 @@ sub save($) {
       my $info = get_mp3info($config{downloading});
       delete $config{downloading};
       my $waitTime = $info->{SECS}-(time-$started);
-      if($waitTime > 0) {
-        countdown($waitTime);
-      }
+      if($waitTime > 0) { countdown($waitTime, "Saved."); }
+    } else {
+      my $info = get_mp3info($config{downloading});
+      delete $config{downloading};
+      countdown($info->{SECS}, "Skipping.");
     }
   }
 }
