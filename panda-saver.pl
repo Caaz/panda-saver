@@ -7,7 +7,9 @@ use WebService::Pandora::Partner::Android;
 use MP3::Tag;
 use MP3::Info;
 use LWP::Simple;
-
+MP3::Tag->config(
+  write_v24 => 'TRUE'
+);
 my %config = ();
 my @config_keys = ('directory','email','password');
 
