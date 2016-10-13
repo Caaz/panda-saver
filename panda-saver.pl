@@ -40,7 +40,7 @@ sub countdown( $ $ ) {
   my $time = time;
   while ($time < $end_time) {
     $time = time;
-    printf("\r\e[37m%s Waiting %02d:%02d:%02d.\e[39m", $text, ($end_time - $time) / (60*60), ($end_time - $time) / (60) % 60, ($end_time - $time) % 60);
+    printf("\r\e[90m%s %02d:%02d:%02d.\e[39m", $text, ($end_time - $time) / (60*60), ($end_time - $time) / (60) % 60, ($end_time - $time) % 60);
     $|++;
     sleep 1;
   }
@@ -66,7 +66,7 @@ sub save($) {
     $config{downloading} = (join "/", ($config{directory},$folders[0],$folders[1],$filename));
     my $file = $config{downloading};
     my $offset = 0;
-    my $text = "Waiting...";
+    my $text = "Simulating playhead...";
     if(!-e $config{downloading}) {
       print "\r\e[32mSaving $config{downloading}\e[39m"; $|++;
       my $started = time;
@@ -74,9 +74,7 @@ sub save($) {
       print "\r\e[92mSaved: $config{downloading}\e[39m\n"; $|++;
       writeTags($track,$config{downloading});
       $offset = (time-$started);
-    } else {
-      $text = "Skipping $track->{songName} by $track->{artistName}...";
-    }
+    } else { $text = "Skipping $track->{songName} by $track->{artistName}..."; }
     delete $config{downloading};
     waitFor($file,$offset,$text);
   }
