@@ -3,7 +3,7 @@ A Pandora client to save your favorite songs locally!
 _Because who needs a terms of service_
 
 ## Prerequisites
-This script takes advantage of three modules.
+This script requires the following modules to run. All should be available via CPAN.
 
   - `WebService::Pandora`
     - `Crypt::Blowfish`
