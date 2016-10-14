@@ -90,7 +90,6 @@ while() {
   $result = $pandora->getPlaylist( stationToken => $stations[$config{station}]->{stationToken} );
   if ( !$result ) {
     my $error = $pandora->error();
-    if($error =~ /error 13\:/) { warn "Bad sync time! Attempting to re-log in.\n"; $pandora = login(); }
-    else { die $error; }
+    if($error =~ /error 13\:/) { $pandora = login(); } else { die $error; }
   } else { foreach my $track ( @{$result->{'items'}} ) { save($track); } }
 }

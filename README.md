@@ -28,3 +28,6 @@ It should give you a list of your stations, from there, enter in a number and it
 Currently there's only one error it handles, 13: Bad Connectivity. It'll try to re-login and continue downloading. This may or may not be the correct way to handle it.
 
 For every other error, it'll die. For now this is the action until I run into one enough to automate fixing it.
+
+## Disclaimer
+I am not responsible for your dumbass actions. If you manage to get banned from Pandora by using this utility it's your own fault. This software is provided as is, yada yada yada. If anything good or bad happens, it's your fault not mine.
