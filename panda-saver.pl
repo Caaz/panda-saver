@@ -105,6 +105,7 @@ for(@kills) { $SIG{$_} = sub  {
 for my $station (@{$config{stations}}) {
   print "Creating thread for $stations[$station]->{stationName} - $stations[$station]->{stationToken}\n";
   dlThread(\@pids,$stations[$station]->{stationToken});
+  sleep 2;
 }
 for(@kills) { $SIG{$_} = sub { for (@pids) { kill('TERM', $_); } exit 1; }; }
 while((my $death = waitpid(-1, 0)) and (@pids > 0)) {
