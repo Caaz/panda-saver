@@ -2,7 +2,7 @@
 use warnings;
 use strict;
 use WebService::Pandora;
-use WebService::Pandora::Partner::Android;
+# use WebService::Pandora::Partner::Android;
 use MP3::Tag;
 use MP3::Info;
 use LWP::Simple;
@@ -65,10 +65,14 @@ sub save($) {
     if(!-e $config{downloading}) {
       print "\e[32mSaving $config{downloading}\e[39m\n";
       my $started = time;
-      getstore($track->{audioUrl},$config{downloading});
-      print "\e[92mSaved: $config{downloading}\e[39m\n";
-      writeTags($track,$config{downloading});
-      $offset = (time-$started);
+      my $rc = getstore($track->{audioUrl},$config{downloading});
+      if (is_error($rc)) {
+        warn "Download failed with $rc";
+      } else {
+        print "\e[92mSaved: $config{downloading}\e[39m\n";
+        writeTags($track,$config{downloading});
+        $offset = (time-$started);
+      }
     } else { $text = "Skipping $track->{songName} by $track->{artistName}..."; }
     delete $config{downloading};
     waitFor($file,$offset,$text);
