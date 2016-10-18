@@ -7,6 +7,7 @@ use MP3::Info;
 use LWP::Simple;
 use File::Path qw(make_path);
 use Cwd 'abs_path';
+use Term::ReadKey;
 # use JSON;
 use constant {
   RESET => 0, BOLD => 1, DIM => 2, RED => 31, GREEN => 32, YELLOW => 33, BLUE => 34, MAGENTA => 35, CYAN => 36, GRAY => 90,
@@ -89,11 +90,14 @@ sub getPlaylist($$) {
 }
 
 MP3::Tag->config(write_v24 => 'TRUE');
-my @config_keys = ('directory','email','password');
+my @config_keys = ('directory','email');
 for(my $i = 0; $i < @ARGV; $i++){ $config{$config_keys[$i]} = $ARGV[$i]; }
 for my $key (@config_keys) { getInput(\$config{$key},"$key: ") if(!$config{$key}); }
+print "\e[".YELLOW."mpassword:\e[".RESET."m";
+ReadMode('noecho'); chomp($config{password} = <STDIN>); ReadMode(0); print "\n"
 $config{directory} =~ s/^\~/$ENV{HOME}/gs;
 $config{directory} =~ s/\/$//gs;
+
 
 my $pandora;
 login(\$pandora);
