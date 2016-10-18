@@ -8,24 +8,23 @@ use LWP::Simple;
 use File::Path qw(make_path);
 use Cwd 'abs_path';
 use Term::ReadKey;
-# use JSON;
 use constant {
   RESET => 0, BOLD => 1, DIM => 2, RED => 31, GREEN => 32, YELLOW => 33, BLUE => 34, MAGENTA => 35, CYAN => 36, GRAY => 90,
   LIGHT_GRAY => 37, LIGHT_RED => 91, LIGHT_GREEN => 92, LIGHT_YELLOW => 93, LIGHT_BLUE => 94, LIGHT_MANGENTA => 95, LIGHT_CYAN => 96
 };
 my %config = ();
 sub say($$) { print "\e[".shift.'m'.shift."\e[".RESET."m\n" }
-# sub debug($) { print to_json(shift)."\n" if $config{debug}; }
 sub sanitize($) { my $text = shift; $text =~ s/[\/]/_/gs; return $text; }
 sub handleError($$) { my ($r, $p) = @_; die $p->error if(!$r); return $r; }
 sub getInput($$) { my $i = shift; print "\e[".YELLOW.'m'.shift.":\e[".RESET."m"; chomp($$i = <STDIN>); }
+sub waitFor($$) { my $waitTime = get_mp3info(shift)->{SECS}-shift; if($waitTime > 0){ say(GRAY,shift); sleep($waitTime); } }
 sub login($) {
   my $p = shift;
   ${$p} = WebService::Pandora->new(username => $config{email}, password => $config{password});
   ${$p}->login() or die( ${$p}->error() );
 }
 sub dlThread($$) {
-  my ($pidList,$station) = (shift,shift);
+  my ($pidList,$station) = @_;
   my $pid = fork;
   if(!$pid) {
     my $pandora;
@@ -57,16 +56,19 @@ sub save($) {
   if(!-e $config{downloading}) {
     say(GREEN,"Saving $config{downloading}");
     my $started = time;
-    getstore($url,$config{downloading});
-    say(LIGHT_GREEN,"Saved $config{downloading}");
-    writeTags($track,$config{downloading});
-    $offset = (time-$started);
+    my $rc = getstore($url,$config{downloading});
+    if (is_error($rc)) {
+      warn "Download failed with $rc";
+    } else {
+      say(LIGHT_GREEN,"Saved $config{downloading}");
+      writeTags($track,$config{downloading});
+      $offset = (time-$started);
+    }
   }
   else { $text = "Skipping $track->{songName} by $track->{artistName}..."; }
   delete $config{downloading};
   waitFor($file,$offset,$text);
 }
-sub waitFor($$) { my $waitTime = get_mp3info(shift)->{SECS}-shift; if($waitTime > 0){ say(GRAY,shift); sleep($waitTime); } }
 sub writeTags($$) {
   my $track = shift;
   my $mp3 = MP3::Tag->new(shift);
@@ -97,7 +99,6 @@ print "\e[".YELLOW."mpassword:\e[".RESET."m";
 ReadMode('noecho'); chomp($config{password} = <STDIN>); ReadMode(0); print "\n";
 $config{directory} =~ s/^\~/$ENV{HOME}/gs;
 $config{directory} =~ s/\/$//gs;
-
 
 my $pandora;
 login(\$pandora);
