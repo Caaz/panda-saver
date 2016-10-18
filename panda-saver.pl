@@ -17,7 +17,6 @@ sub say($$) { print "\e[".shift.'m'.shift."\e[".RESET."m\n" }
 sub sanitize($) { my $text = shift; $text =~ s/[\/]/_/gs; return $text; }
 sub handleError($$) { my ($r, $p) = @_; die $p->error if(!$r); return $r; }
 sub getInput($$) { my $i = shift; print "\e[".YELLOW.'m'.shift.":\e[".RESET."m"; chomp($$i = <STDIN>); }
-# sub waitFor($$$) { my $waitTime = get_mp3info(shift)->{SECS}-shift; if($waitTime > 0){ say(GRAY,shift); sleep($waitTime); } }
 sub login($) {
   my $p = shift;
   ${$p} = WebService::Pandora->new(username => $config{email}, password => $config{password});
@@ -41,7 +40,7 @@ sub dlThread($$) {
           my ($file,$offset) = save($track);
           $waitTime += get_mp3info($file)->{SECS}-$offset if(defined $file && defined $offset);
         }
-        if($waitTime > 0){ say(GRAY,"Simulating playhead..."); sleep($waitTime); }
+        if($waitTime > 0){ say(GRAY,"Waiting $waitTime to simulate playhead..."); sleep($waitTime); }
       }
     }
   } else { push(@{$pidList},$pid); }
