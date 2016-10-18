@@ -53,7 +53,7 @@ sub save($) {
   $config{downloading} = $path.'/'.sanitize($track->{songName}.$extension);
   my $file = $config{downloading};
   my $offset = 0;
-  my $text = "Simulating playhead...";
+  my $text = "Simulating playhead for $track->{songName}...";
   if(!-e $config{downloading}) {
     say(GREEN,"Saving $config{downloading}");
     my $started = time;
