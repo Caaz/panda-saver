@@ -5,13 +5,15 @@ _Because who needs a terms of service_
 ## Prerequisites
 This script requires the following modules to run. All should be available via CPAN.
 
+  - `File::Path`
+  - `Cwd`
+  - `LWP::Simple`
+    - `Mozilla::CA` If you get the error about not knowing which certificates to trust, update this module.
   - `WebService::Pandora`
     - `Crypt::Blowfish`
     - `Crypt::ECB`
   - `MP3::Tag`
   - `MP3::Info`
-  - `LWP::Simple`
-    - `Mozilla::CA` If you get the error about not knowing which certificates to trust, update this module.
 
 ## Usage
 Simply run the script and it'll walk you through setting up the configuration.
