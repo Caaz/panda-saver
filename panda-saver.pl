@@ -17,7 +17,7 @@ sub say($$) { print "\e[".shift.'m'.shift."\e[".RESET."m\n" }
 sub sanitize($) { my $text = shift; $text =~ s/[\/]/_/gs; return $text; }
 sub handleError($$) { my ($r, $p) = @_; die $p->error if(!$r); return $r; }
 sub getInput($$) { my $i = shift; print "\e[".YELLOW.'m'.shift.":\e[".RESET."m"; chomp($$i = <STDIN>); }
-sub waitFor($$$) { my $waitTime = get_mp3info(shift)->{SECS}-shift; if($waitTime > 0){ say(GRAY,shift); sleep($waitTime); } }
+# sub waitFor($$$) { my $waitTime = get_mp3info(shift)->{SECS}-shift; if($waitTime > 0){ say(GRAY,shift); sleep($waitTime); } }
 sub login($) {
   my $p = shift;
   ${$p} = WebService::Pandora->new(username => $config{email}, password => $config{password});
@@ -34,7 +34,15 @@ sub dlThread($$) {
       if ( !$result ) {
         my $error = $pandora->error();
         if($error =~ /error 13\:/) { login(\$pandora); } else { die $error; }
-      } else { foreach my $track ( @{$result->{'items'}} ) { save($track); } }
+      } else {
+        # my @files
+        my $waitTime = 0;
+        for my $track (@{$result->{'items'}}) {
+          my ($file,$offset) = save($track);
+          $waitTime += get_mp3info($file)->{SECS}-$offset if(defined $file && defined $offset);
+        }
+        if($waitTime > 0){ say(GRAY,"Simulating playhead..."); sleep($waitTime); }
+      }
     }
   } else { push(@{$pidList},$pid); }
 }
@@ -52,7 +60,7 @@ sub save($) {
   $config{downloading} = $path.'/'.sanitize($track->{songName}.$extension);
   my $file = $config{downloading};
   my $offset = 0;
-  my $text = "Simulating playhead for $track->{songName}...";
+  # my $text = "Simulating playhead for $track->{songName}...";
   if(!-e $config{downloading}) {
     say(GREEN,"Saving $config{downloading}");
     my $started = time;
@@ -65,9 +73,10 @@ sub save($) {
       $offset = (time-$started);
     }
   }
-  else { $text = "Skipping $track->{songName} by $track->{artistName}..."; }
+  # else { $text = "Skipping $track->{songName} by $track->{artistName}..."; }
   delete $config{downloading};
-  waitFor($file,$offset,$text);
+  # waitFor($file,$offset,$text);
+  return ($file, $offset);
 }
 sub writeTags($$) {
   my $track = shift;
