@@ -41,7 +41,7 @@ sub dlThread($$) {
 }
 sub save($) {
   my $track = shift;
-  return if !$track;
+  return if !($track->{additionalAudioUrl} && $track->{songName} && $track->{artistName} && $track->{albumName});
   # Make folders
   my $path = join "/", ($config{directory}, sanitize($track->{artistName}), sanitize($track->{albumName}));
   for(make_path($path)) { say(GRAY,"Directory Created: $_"); }
@@ -94,7 +94,7 @@ my @config_keys = ('directory','email');
 for(my $i = 0; $i < @ARGV; $i++){ $config{$config_keys[$i]} = $ARGV[$i]; }
 for my $key (@config_keys) { getInput(\$config{$key},"$key: ") if(!$config{$key}); }
 print "\e[".YELLOW."mpassword:\e[".RESET."m";
-ReadMode('noecho'); chomp($config{password} = <STDIN>); ReadMode(0); print "\n"
+ReadMode('noecho'); chomp($config{password} = <STDIN>); ReadMode(0); print "\n";
 $config{directory} =~ s/^\~/$ENV{HOME}/gs;
 $config{directory} =~ s/\/$//gs;
 
