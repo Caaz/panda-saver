@@ -2,118 +2,118 @@
 use warnings;
 use strict;
 use WebService::Pandora;
-# use WebService::Pandora::Partner::Android;
 use MP3::Tag;
 use MP3::Info;
 use LWP::Simple;
-MP3::Tag->config(write_v24 => 'TRUE');
+use File::Path qw(make_path);
+use Cwd 'abs_path';
+# use JSON;
+use constant {
+  RESET => 0, BOLD => 1, DIM => 2, RED => 31, GREEN => 32, YELLOW => 33, BLUE => 34, MAGENTA => 35, CYAN => 36, GRAY => 90,
+  LIGHT_GRAY => 37, LIGHT_RED => 91, LIGHT_GREEN => 92, LIGHT_YELLOW => 93, LIGHT_BLUE => 94, LIGHT_MANGENTA => 95, LIGHT_CYAN => 96
+};
 my %config = ();
-my @config_keys = ('directory','email','password');
-
-sub dlThread( $ $ ) {
+sub say($$) { print "\e[".shift.'m'.shift."\e[".RESET."m\n" }
+# sub debug($) { print to_json(shift)."\n" if $config{debug}; }
+sub sanitize($) { my $text = shift; $text =~ s/[\/]/_/gs; return $text; }
+sub handleError($$) { my ($r, $p) = @_; die $p->error if(!$r); return $r; }
+sub getInput($$) { my $i = shift; print "\e[".YELLOW.'m'.shift.":\e[".RESET."m"; chomp($$i = <STDIN>); }
+sub login($) {
+  my $p = shift;
+  ${$p} = WebService::Pandora->new(username => $config{email}, password => $config{password});
+  ${$p}->login() or die( ${$p}->error() );
+}
+sub dlThread($$) {
   my ($pidList,$station) = (shift,shift);
   my $pid = fork;
   if(!$pid) {
-    my $pandora = login();
+    my $pandora;
+    login(\$pandora);
     while() {
-      my $result = $pandora->getPlaylist( stationToken => $station );
+      my $result = getPlaylist($pandora, $station);
       if ( !$result ) {
         my $error = $pandora->error();
-        if($error =~ /error 13\:/) { $pandora = login(); } else { die $error; }
+        if($error =~ /error 13\:/) { login(\$pandora); } else { die $error; }
       } else { foreach my $track ( @{$result->{'items'}} ) { save($track); } }
     }
   } else { push(@{$pidList},$pid); }
 }
-sub getInput($) { print "\e[33m$_[0]\e[39m"; my $i; chomp($i = <STDIN>); return $i; }
-sub stringifyArray($) { return '['.(join ", ", @{$_[0]}).']'; }
-sub touchDir($) { if(!-e $_[0]) { print "\e[90mCreating directory: $_[0]\e[39m\n"; mkdir($_[0]) or die $!; } }
-sub sanitize($) { my $text = shift; $text =~ s/[\/&]/_/gs; return $text; }
-sub writeTags( $ $ ) {
+sub save($) {
+  my $track = shift;
+  return if !$track;
+  # Make folders
+  my $path = join "/", ($config{directory}, sanitize($track->{artistName}), sanitize($track->{albumName}));
+  for(make_path($path)) { say(GRAY,"Directory Created: $_"); }
+  # URL to download from
+  my $url = $track->{additionalAudioUrl};
+  # Get Extension
+  my $extension = $url;
+  $extension =~ s/^.*(\.[^.]{3})\?.*$/$1/gs;
+  $config{downloading} = $path.'/'.sanitize($track->{songName}.$extension);
+  my $file = $config{downloading};
+  my $offset = 0;
+  my $text = "Simulating playhead...";
+  if(!-e $config{downloading}) {
+    say(GREEN,"Saving $config{downloading}");
+    my $started = time;
+    getstore($url,$config{downloading});
+    say(LIGHT_GREEN,"Saved $config{downloading}");
+    writeTags($track,$config{downloading});
+    $offset = (time-$started);
+  }
+  else { $text = "Skipping $track->{songName} by $track->{artistName}..."; }
+  delete $config{downloading};
+  waitFor($file,$offset,$text);
+}
+sub waitFor($$) { my $waitTime = get_mp3info(shift)->{SECS}-shift; if($waitTime > 0){ say(GRAY,shift); sleep($waitTime); } }
+sub writeTags($$) {
   my $track = shift;
   my $mp3 = MP3::Tag->new(shift);
   $mp3->new_tag("ID3v2");
   $mp3->update_tags({title => $track->{trackName}, artist => $track->{artistName}, album => $track->{albumName},});
   $mp3->close();
 }
-sub countdown( $ $ ) {
-  my ($end,$text) = (time + shift,shift);
-  for(my $r = $end - time; $r > 0; $r = ($end - time)) { sleep(1); }
-    # printf("\r\e[90m%s %02d:%02d:%02d\e[39m", $text, $r / (60*60), $r / (60) % 60, $r % 60) and $|++;
-  # }
-  # print "\r" and $|++;
+sub getPlaylist($$) {
+  my ($self,$stationToken) = @_;
+  if ( !defined( $stationToken ) ) { $self->error( 'A stationToken must be specified.' ); return; }
+  my $method = WebService::Pandora::Method->new(
+    name => 'station.getPlaylist', partnerAuthToken => $self->{'partnerAuthToken'},
+    userAuthToken => $self->{'userAuthToken'}, partnerId => $self->{'partnerId'},
+    userId => $self->{'userId'}, syncTime => $self->{'syncTime'},
+    host => $self->{'partner'}{'host'}, ssl => 0, encrypt => 1,
+    cryptor => $self->{'cryptor'}, timeout => $self->{'timeout'},
+    params => { 'stationToken' => $stationToken, 'additionalAudioUrl' => 'HTTP_128_MP3', } );
+  my $ret = $method->execute();
+  if ( !$ret ) { $self->error( $method->error() ); return; }
+  return $ret;
 }
-sub waitFor( $ $ $ ) {
-  my $info = get_mp3info(shift);
-  my $waitTime = $info->{SECS}-shift;
-  countdown($waitTime, shift) if($waitTime > 0);
-}
-sub save($) {
-  my $track = $_[0];
-  if($track->{audioUrl} && $track->{songName} && $track->{artistName} && $track->{albumName}) {
-    my @folders = ($track->{artistName},$track->{albumName});
-    for(@folders) { $_ = sanitize($_); }
-    touchDir(join "/", ($config{directory},$folders[0]));
-    touchDir(join "/", ($config{directory},$folders[0],$folders[1]));
-    my $extension = $track->{audioUrl};
-    $extension =~ s/^.*(\.[^.]{3})\?.*$/$1/gs;
-    my $filename = $track->{songName}.$extension;
-    $filename = sanitize($filename);
-    $config{downloading} = (join "/", ($config{directory},$folders[0],$folders[1],$filename));
-    my $file = $config{downloading};
-    my $offset = 0;
-    my $text = "Simulating playhead...";
-    if(!-e $config{downloading}) {
-      print "\e[32mSaving $config{downloading}\e[39m\n";
-      my $started = time;
-      my $rc = getstore($track->{audioUrl},$config{downloading});
-      if (is_error($rc)) {
-        warn "Download failed with $rc";
-      } else {
-        print "\e[92mSaved: $config{downloading}\e[39m\n";
-        writeTags($track,$config{downloading});
-        $offset = (time-$started);
-      }
-    } else { $text = "Skipping $track->{songName} by $track->{artistName}..."; }
-    delete $config{downloading};
-    waitFor($file,$offset,$text);
-  }
-}
-sub login() {
-  my $p = WebService::Pandora->new(username => $config{email}, password => $config{password});
-  $p->login() or die( $p->error() ); return $p;
-}
-# Set configuration
+
+MP3::Tag->config(write_v24 => 'TRUE');
+my @config_keys = ('directory','email','password');
 for(my $i = 0; $i < @ARGV; $i++){ $config{$config_keys[$i]} = $ARGV[$i]; }
-for my $key (@config_keys) { $config{$key} = getInput("$key: ") if(!$config{$key}); }
-$config{directory} =~ s/\/$//gs; touchDir($config{directory});
-# Login
-my $pandora = login();
-# Get Station List
-my $result = $pandora->getStationList();
-die( $pandora->error() ) if ( !$result );
+for my $key (@config_keys) { getInput(\$config{$key},"$key: ") if(!$config{$key}); }
+$config{directory} =~ s/^\~/$ENV{HOME}/gs;
+$config{directory} =~ s/\/$//gs;
+
+my $pandora;
+login(\$pandora);
+my $result = handleError($pandora->getStationList(), $pandora);
 my @stations = @{$result->{'stations'}};
 for (my $i = 0; $i < @stations; $i++) { print "$i: \e[36m$stations[$i]->{stationName}\e[39m\n"; }
-# Choose a station
 @{$config{stations}} = ();
 while() {
-  my $choice = getInput("Add a station by number (-1 to stop adding stations): ");
+  my $choice;
+  getInput(\$choice, "Add a station by number (-1 to stop adding stations): ");
   if(($choice >= 0) && ($choice < @stations)) { push(@{$config{stations}},$choice); }
   else { last; }
 }
 my @pids;
 my @kills = ('ABRT','QUIT','KILL','INT','ABRT','HUP');
-for(@kills) { $SIG{$_} = sub  {
-  if($config{downloading}) { print "\n\e[91mRemoving partial: $config{downloading}\e[39m"; unlink($config{downloading}); }
-  print "\e[39m\n" and exit 0;
-}; }
+for(@kills) { $SIG{$_} = sub { if($config{downloading}) { say(RED,"Removing Partial: $config{downloading}"); unlink($config{downloading}); } }; }
 for my $station (@{$config{stations}}) {
-  print "Creating thread for $stations[$station]->{stationName} - $stations[$station]->{stationToken}\n";
+  say(DIM, "Creating thread for $stations[$station]->{stationName}");
   dlThread(\@pids,$stations[$station]->{stationToken});
   sleep 2;
 }
 for(@kills) { $SIG{$_} = sub { for (@pids) { kill('TERM', $_); } exit 1; }; }
-while((my $death = waitpid(-1, 0)) and (@pids > 0)) {
-  print "Thread $death has died. removing it from pids. Length Before:".(@pids+0);
-  @pids = grep { $_ != $death } @pids;
-  print " Length After: ".(@pids+0)."\n";
-}
+while((my $death = waitpid(-1, 0)) and (@pids > 0)) { say(RED,"Thread $death has died. ".(@pids-1)." children left"); @pids = grep { $_ != $death } @pids; }
