@@ -12,8 +12,11 @@ use constant {
   RESET => 0, BOLD => 1, DIM => 2, RED => 31, GREEN => 32, YELLOW => 33, BLUE => 34, MAGENTA => 35, CYAN => 36, GRAY => 90,
   LIGHT_GRAY => 37, LIGHT_RED => 91, LIGHT_GREEN => 92, LIGHT_YELLOW => 93, LIGHT_BLUE => 94, LIGHT_MANGENTA => 95, LIGHT_CYAN => 96
 };
+my $id = 1;
 my %config = ();
-sub say($$) { print "\e[".shift.'m'.shift."\e[".RESET."m\n" }
+sub say($$) { print "\e[".shift.'m'.shift."\e[".RESET."m\n"; }
+sub display($$) { print "\e[0;0H".(($id)?"\e[".$id."B\e[K":"")."\e[K\e[".shift.'m'.shift."\e[".RESET."m\n"; }
+sub status($$) { print "\e[0;0H\e[".shift.'m'.shift."\e[K\e[".RESET."m\n"; }
 sub sanitize($) { my $text = shift; $text =~ s/[\/]/_/gs; return $text; }
 sub handleError($$) { my ($r, $p) = @_; die $p->error if(!$r); return $r; }
 sub getInput($$) { my $i = shift; print "\e[".YELLOW.'m'.shift.":\e[".RESET."m"; chomp($$i = <STDIN>); }
@@ -26,6 +29,9 @@ sub dlThread($$) {
   my ($pidList,$station) = @_;
   my $pid = fork;
   if(!$pid) {
+    my $wait = $id*5;
+    display(GRAY,"Waiting $wait seconds before logging in...");
+    sleep($wait);
     my $pandora;
     login(\$pandora);
     while() {
@@ -34,23 +40,22 @@ sub dlThread($$) {
         my $error = $pandora->error();
         if($error =~ /error 13\:/) { login(\$pandora); } else { die $error; }
       } else {
-        # my @files
         my $waitTime = 0;
         for my $track (@{$result->{'items'}}) {
           my ($file,$offset) = save($track);
           $waitTime += get_mp3info($file)->{SECS}-$offset if(defined $file && defined $offset);
         }
-        if($waitTime > 0){ say(GRAY,"Waiting $waitTime to simulate playhead..."); sleep($waitTime); }
+        while($waitTime-- > 0) { display(GRAY,"Waiting ".int($waitTime)." seconds to simulate playhead..."); sleep(1); }
       }
     }
-  } else { push(@{$pidList},$pid); }
+  } else { push(@{$pidList},$pid); $id++; }
 }
 sub save($) {
   my $track = shift;
   return if !($track->{additionalAudioUrl} && $track->{songName} && $track->{artistName} && $track->{albumName});
   # Make folders
   my $path = join "/", ($config{directory}, sanitize($track->{artistName}), sanitize($track->{albumName}));
-  for(make_path($path)) { say(GRAY,"Directory Created: $_"); }
+  for(make_path($path)) { display(GRAY,"Directory Created: $_"); }
   # URL to download from
   my $url = $track->{additionalAudioUrl};
   # Get Extension
@@ -59,22 +64,19 @@ sub save($) {
   $config{downloading} = $path.'/'.sanitize($track->{songName}.$extension);
   my $file = $config{downloading};
   my $offset = 0;
-  # my $text = "Simulating playhead for $track->{songName}...";
   if(!-e $config{downloading}) {
-    say(GREEN,"Saving $config{downloading}");
+    display(GREEN,"Saving $config{downloading}");
     my $started = time;
     my $rc = getstore($url,$config{downloading});
     if (is_error($rc)) {
       warn "Download failed with $rc";
     } else {
-      say(LIGHT_GREEN,"Saved $config{downloading}");
+      display(LIGHT_GREEN,"Saved $config{downloading}");
       writeTags($track,$config{downloading});
       $offset = (time-$started);
     }
   }
-  # else { $text = "Skipping $track->{songName} by $track->{artistName}..."; }
   delete $config{downloading};
-  # waitFor($file,$offset,$text);
   return ($file, $offset);
 }
 sub writeTags($$) {
@@ -98,11 +100,11 @@ sub getPlaylist($$) {
   if ( !$ret ) { $self->error( $method->error() ); return; }
   return $ret;
 }
-
+print "\033]0;Panda\007"."\e[0;0H"."\033[2J"."\e[?25l";
 MP3::Tag->config(write_v24 => 'TRUE');
 my @config_keys = ('directory','email');
 for(my $i = 0; $i < @ARGV; $i++){ $config{$config_keys[$i]} = $ARGV[$i]; }
-for my $key (@config_keys) { getInput(\$config{$key},"$key: ") if(!$config{$key}); }
+for my $key (@config_keys) { getInput(\$config{$key},$key) if(!$config{$key}); }
 print "\e[".YELLOW."mpassword:\e[".RESET."m";
 ReadMode('noecho'); chomp($config{password} = <STDIN>); ReadMode(0); print "\n";
 $config{directory} =~ s/^\~/$ENV{HOME}/gs;
@@ -120,13 +122,14 @@ while() {
   if(($choice >= 0) && ($choice < @stations)) { push(@{$config{stations}},$choice); }
   else { last; }
 }
+print "\033[2J";
 my @pids;
 my @kills = ('ABRT','QUIT','KILL','INT','ABRT','HUP');
-for(@kills) { $SIG{$_} = sub { if($config{downloading}) { say(RED,"Removing Partial: $config{downloading}"); unlink($config{downloading}); } }; }
+for(@kills) { $SIG{$_} = sub { if($config{downloading}) { display(RED,"Removing Partial: $config{downloading}"); unlink($config{downloading}); } }; }
 for my $station (@{$config{stations}}) {
-  say(DIM, "Creating thread for $stations[$station]->{stationName}");
+  status(DIM, "Creating thread for $stations[$station]->{stationName}");
   dlThread(\@pids,$stations[$station]->{stationToken});
-  sleep 2;
 }
-for(@kills) { $SIG{$_} = sub { for (@pids) { kill('TERM', $_); } exit 1; }; }
-while((my $death = waitpid(-1, 0)) and (@pids > 0)) { say(RED,"Thread $death has died. ".(@pids-1)." children left"); @pids = grep { $_ != $death } @pids; }
+status(BLUE, "Panda");
+for(@kills) { $SIG{$_} = sub { for (@pids) { kill('TERM', $_); } print "\e[0;0H"."\033[2J"."\e[?25h"; exit 1; }; }
+while((my $death = waitpid(-1, 0)) and (@pids > 0)) { status(RED,"Thread $death has died. ".(@pids-1)." children left"); @pids = grep { $_ != $death } @pids; }
