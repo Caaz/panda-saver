@@ -5,41 +5,35 @@ use WebService::Pandora;
 use MP3::Tag;
 use MP3::Info;
 use LWP::Simple;
+use JSON;
 use File::Path qw(make_path);
 use Cwd 'abs_path';
-use Term::ReadKey;
 use constant {
   RESET => 0, BOLD => 1, DIM => 2, RED => 31, GREEN => 32, YELLOW => 33, BLUE => 34, MAGENTA => 35, CYAN => 36, GRAY => 90,
   LIGHT_GRAY => 37, LIGHT_RED => 91, LIGHT_GREEN => 92, LIGHT_YELLOW => 93, LIGHT_BLUE => 94, LIGHT_MANGENTA => 95, LIGHT_CYAN => 96
 };
 my (%self, %config, @threads);
-sub toClock($) { my $t = shift; return sprintf('%2d:%2d',int($t/60), $t%60); }
-sub clear() { print "\033[2J"."\033]0;Panda\007"."\e[?25l"; }
+sub toClock($) { my $t = shift; return sprintf('%02s:%02s',int($t/60), $t%60); }
+sub clear() { print "\033[2J"; }
 sub sanitize($) { my $text = shift; $text =~ s/[\/]/_/gs; return $text; }
 sub handleError($$) { my ($r, $p) = @_; die $p->error if(!$r); return $r; }
 sub getInput($$) { my $i = shift; print "\e[".YELLOW.'m'.shift.": \e[".RESET."m"; chomp($$i = <STDIN>); }
+sub appendLog($) { open LOG, (">>$config{directory}/log.txt"); print LOG encode_json(shift)."\n"; close LOG; }
 sub waitFor($$) { for(my ($wait,$text) = @_; $wait-- > 0; sleep 1) { display(DIM,sprintf($text,toClock($wait))); } }
 sub display($$) { print "\e[0;0H".(($self{line})?"\e[".$self{line}."B\e[K":"")."\e[K\e[".shift.'m'.getName().' '.shift."\e[".RESET."m\n"; }
 sub mkChild($$) { my ($m,%c) = (shift,%{shift()}); $c{line} = @{$m}+1; my $pid = fork; if($pid) { push($m,$pid); } else { $c{block}(\%c); } }
 sub died($) { display(RED,shift); die(); }
 sub getName() {
-  if($self{name}) {
-    my $name;
-    ($name = $self{name}) =~ s/ Radio$//gs;
-    return sprintf('%15.15s [%3d]', $name, $self{total});
-  }
+  if($self{name}) { my $name; ($name = $self{name}) =~ s/ Radio$//gs; return sprintf('%15.15s [%3d/%-3d]', $name, $self{downloaded},$self{skips}); }
   return sprintf('%15.15s', "Panda");
 }
 sub login($) {
-  my $p = shift;
-  display(DIM,"Logging in...");
+  my $p = shift; display(DIM,"Logging in...");
   ${$p} = WebService::Pandora->new(username => $config{email}, password => $config{password});
   ${$p}->login() or died( ${$p}->error() );
 }
 sub writeTags($$) {
-  my $track = shift;
-  my $mp3 = MP3::Tag->new(shift);
-  $mp3->new_tag("ID3v2");
+  my $track = shift; my $mp3 = MP3::Tag->new(shift); $mp3->new_tag("ID3v2");
   $mp3->update_tags({title => $track->{trackName}, artist => $track->{artistName}, album => $track->{albumName},});
   $mp3->close();
 }
@@ -62,14 +56,16 @@ sub getConfig() {
   my @keys = ('directory','email','all');
   for(my $i = 0; $i < @ARGV; $i++){ $config{$keys[$i]} = $ARGV[$i]; }
   for my $key (@keys) { getInput(\$config{$key},$key) if(!$config{$key}); }
-  print "\e[".YELLOW."mpassword:\e[".RESET."m";
-  ReadMode('noecho'); chomp($config{password} = <STDIN>); ReadMode(0); print "\n";
+  print "\e]0;Panda\007"."\e[?25l\e[".YELLOW."mpassword: \e[8m";
+  chomp($config{password} = <STDIN>);
   $config{directory} =~ s/^\~/$ENV{HOME}/gs;
   $config{directory} =~ s/\/$//gs;
+  clear();
 }
 sub thread($) {
   %self = %{shift()};
-  $self{total} = 0;
+  $self{downloaded} = 0;
+  $self{skips} = 0;
   waitFor($self{line}*3, 'Waiting to start. %s');
   my $pandora;
   login(\$pandora);
@@ -90,6 +86,7 @@ sub thread($) {
 }
 sub save($) {
   my $track = shift;
+  appendLog($track);
   return if !($track->{additionalAudioUrl} && $track->{songName} && $track->{artistName} && $track->{albumName});
   # Make folders
   my $path = join "/", ($config{directory}, sanitize($track->{artistName}), sanitize($track->{albumName}));
@@ -107,26 +104,27 @@ sub save($) {
     my $started = time;
     my $rc = getstore($url,$config{downloading});
     if (is_error($rc)) { display(RED,"Download failed with $rc"); }
-    else { $self{total}++; display(LIGHT_GREEN,"Saved $config{downloading}"); writeTags($track,$config{downloading}); $offset = (time-$started); }
-  }
+    else {
+      $self{downloaded}++;
+      display(LIGHT_GREEN,"Saved $config{downloading}");
+      writeTags($track,$config{downloading});
+      $offset = (time-$started);
+    }
+  } else { $self{skips}++; }
   delete $config{downloading};
   return ($file, $offset);
 }
 sub start() {
-  getConfig();
-  my $pandora;
-  login(\$pandora);
+  getConfig(); my $pandora; login(\$pandora);
   my $result = handleError($pandora->getStationList(), $pandora);
   my @stations = @{$result->{'stations'}};
   for (my $i = 0; $i < @stations; $i++) { print "$i: \e[36m$stations[$i]->{stationName}\e[39m\n"; }
   @{$config{stations}} = ();
-  if($config{all}) {
-    @{$config{stations}} = (0..(@stations-1));
-  } else {
+  if($config{all}) { @{$config{stations}} = (0..(@stations-1)); }
+  else {
     print "Input -1 to end adding stations.\n";
     while() {
-      my $choice;
-      getInput(\$choice, "Add a station by number: ");
+      my $choice; getInput(\$choice, "Add a station by number: ");
       if(($choice >= 0) && ($choice < @stations)) { push(@{$config{stations}},$choice); }
       else { last; }
     }

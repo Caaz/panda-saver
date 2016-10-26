@@ -5,7 +5,6 @@ _Because who needs a terms of service_
 ## Dependencies
 - `Cwd`
 - `File::Path`
-- `Term::ReadKey`
 - `LWP::Simple`
   - `Mozilla::CA` If you get the error about not knowing which certificates to trust, update this module.
 - `WebService::Pandora`
@@ -26,7 +25,7 @@ Simply run the script and it'll walk you through setting up the configuration.
 - `directory`
   - This is where the music gets saved. if the directory doesn't exist, it'll create it. Panda will automatically sort your music in this directory as `./Artist/Album/Track.xxx`
 - `email`
-  - This is your pandora email. As of some version of this program, you can no longer use email as a command line argument. This is for privacy, and is why Term::ReadKey is a requirement, as now we hide the input while you type your password to login.
+  - This is your pandora email. As of some version of this program, you can no longer use email as a command line argument. This is for privacy, now we hide the input while you type your password to login.
 - `all`
   - This value should either be 0 or 1. 0 will use the classic behavior of choosing individual stations to download from, but 1 will automatically select every station and rip from those. **warning** This causes some weird behavior with a lot of stations if your terminal isn't large enough to show all lines.
 
