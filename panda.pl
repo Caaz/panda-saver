@@ -111,9 +111,10 @@ sub start() {
   if($config{all}) {
     @{$config{stations}} = (0..(@stations-1));
   } else {
+    print "Input -1 to end adding stations.\n";
     while() {
       my $choice;
-      getInput(\$choice, "Add a station by number (-1 to stop adding stations): ");
+      getInput(\$choice, "Add a station by number: ");
       if(($choice >= 0) && ($choice < @stations)) { push(@{$config{stations}},$choice); }
       else { last; }
     }
