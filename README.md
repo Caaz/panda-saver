@@ -7,7 +7,7 @@ This script requires the following modules to run. All should be available via C
 
   - `File::Path`
   - `Cwd`
-  - 'Term::ReadKey'
+  - `Term::ReadKey`
   - `LWP::Simple`
     - `Mozilla::CA` If you get the error about not knowing which certificates to trust, update this module.
   - `WebService::Pandora`
