@@ -25,7 +25,7 @@ sub getName() {
   if($self{name}) {
     my $name;
     ($name = $self{name}) =~ s/ Radio$//gs;
-    return sprintf('[%15.15s] [Total: %2d] ', $name, $self{total})
+    return sprintf('[%15.15s] [%3d] ', $name, $self{total})
   }
   return '';
 }
@@ -69,7 +69,7 @@ sub getConfig() {
 sub thread($) {
   %self = %{shift()};
   $self{total} = 0;
-  waitFor($self{line}*3, 'Waiting: %s');
+  waitFor($self{line}*3, 'Waiting to start. %s');
   my $pandora;
   login(\$pandora);
   while() {
@@ -83,7 +83,7 @@ sub thread($) {
         my ($file,$offset) = save($track);
         $waitTime += get_mp3info($file)->{SECS}-$offset if(defined $file && defined $offset);
       }
-      waitFor($waitTime, 'Simulating playhead: %s');
+      waitFor($waitTime, 'Simulating playhead. %s');
     }
   }
 }
@@ -112,6 +112,7 @@ sub save($) {
   return ($file, $offset);
 }
 sub start() {
+  getConfig();
   my $pandora;
   login(\$pandora);
   my $result = handleError($pandora->getStationList(), $pandora);
@@ -141,5 +142,4 @@ sub start() {
   for(@kills) { $SIG{$_} = sub { for (@threads) { kill('TERM', $_); } print "\e[0;0H"."\033[2J"."\e[?25h"; exit 1; }; }
   while((my $death = waitpid(-1, 0)) and (@threads > 0)) { display(RED,"Thread $death has died. ".(@threads-1)." children left"); @threads = grep { $_ != $death } @threads; }
 }
-getConfig();
 start();
