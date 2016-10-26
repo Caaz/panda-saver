@@ -1,4 +1,4 @@
-# Panda Saver
+# Panda
 A Pandora client to save your favorite songs locally!
 _Because who needs a terms of service_
 
