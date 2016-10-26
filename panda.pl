@@ -13,13 +13,22 @@ use constant {
   LIGHT_GRAY => 37, LIGHT_RED => 91, LIGHT_GREEN => 92, LIGHT_YELLOW => 93, LIGHT_BLUE => 94, LIGHT_MANGENTA => 95, LIGHT_CYAN => 96
 };
 my (%self, %config, @threads);
+sub toClock($) { my $t = shift; return sprintf('%2d:%2d',int($t/60), $t%60); }
 sub clear() { print "\033[2J"."\033]0;Panda\007"."\e[?25l"; }
 sub sanitize($) { my $text = shift; $text =~ s/[\/]/_/gs; return $text; }
 sub handleError($$) { my ($r, $p) = @_; die $p->error if(!$r); return $r; }
 sub getInput($$) { my $i = shift; print "\e[".YELLOW.'m'.shift.": \e[".RESET."m"; chomp($$i = <STDIN>); }
-sub waitFor($$) { for(my ($wait,$text) = @_; $wait-- > 0; sleep 1) { display(DIM,sprintf($text,$wait)); } }
-sub display($$) { print "\e[0;0H".(($self{line})?"\e[".$self{line}."B\e[K":"")."\e[K\e[".shift.'m'.(($self{name})?$self{name}.": ":'').shift."\e[".RESET."m\n"; }
+sub waitFor($$) { for(my ($wait,$text) = @_; $wait-- > 0; sleep 1) { display(DIM,sprintf($text,toClock($wait))); } }
+sub display($$) { print "\e[0;0H".(($self{line})?"\e[".$self{line}."B\e[K":"")."\e[K\e[".shift.'m'.getName().shift."\e[".RESET."m\n"; }
 sub mkChild($$) { my ($m,%c) = (shift,%{shift()}); $c{line} = @{$m}+1; my $pid = fork; if($pid) { push($m,$pid); } else { $c{block}(\%c); } }
+sub getName() {
+  if($self{name}) {
+    my $name;
+    ($name = $self{name}) =~ s/ Radio$//gs;
+    return sprintf('[%15.15s] [Total: %2d] ', $name, $self{total})
+  }
+  return '';
+}
 sub login($) {
   my $p = shift;
   display(DIM,"Logging in...");
@@ -59,7 +68,8 @@ sub getConfig() {
 }
 sub thread($) {
   %self = %{shift()};
-  waitFor($self{line}*5, 'Waiting %d to before logging in...');
+  $self{total} = 0;
+  waitFor($self{line}*3, 'Waiting: %s');
   my $pandora;
   login(\$pandora);
   while() {
@@ -73,7 +83,7 @@ sub thread($) {
         my ($file,$offset) = save($track);
         $waitTime += get_mp3info($file)->{SECS}-$offset if(defined $file && defined $offset);
       }
-      waitFor($waitTime, 'Waiting %d to simulate playhead...');
+      waitFor($waitTime, 'Simulating playhead: %s');
     }
   }
 }
@@ -96,7 +106,7 @@ sub save($) {
     my $started = time;
     my $rc = getstore($url,$config{downloading});
     if (is_error($rc)) { display(RED,"Download failed with $rc"); }
-    else { display(LIGHT_GREEN,"Saved $config{downloading}"); writeTags($track,$config{downloading}); $offset = (time-$started); }
+    else { $self{total}++; display(LIGHT_GREEN,"Saved $config{downloading}"); writeTags($track,$config{downloading}); $offset = (time-$started); }
   }
   delete $config{downloading};
   return ($file, $offset);
