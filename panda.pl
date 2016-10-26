@@ -19,21 +19,22 @@ sub sanitize($) { my $text = shift; $text =~ s/[\/]/_/gs; return $text; }
 sub handleError($$) { my ($r, $p) = @_; die $p->error if(!$r); return $r; }
 sub getInput($$) { my $i = shift; print "\e[".YELLOW.'m'.shift.": \e[".RESET."m"; chomp($$i = <STDIN>); }
 sub waitFor($$) { for(my ($wait,$text) = @_; $wait-- > 0; sleep 1) { display(DIM,sprintf($text,toClock($wait))); } }
-sub display($$) { print "\e[0;0H".(($self{line})?"\e[".$self{line}."B\e[K":"")."\e[K\e[".shift.'m'.getName().shift."\e[".RESET."m\n"; }
+sub display($$) { print "\e[0;0H".(($self{line})?"\e[".$self{line}."B\e[K":"")."\e[K\e[".shift.'m'.getName().' '.shift."\e[".RESET."m\n"; }
 sub mkChild($$) { my ($m,%c) = (shift,%{shift()}); $c{line} = @{$m}+1; my $pid = fork; if($pid) { push($m,$pid); } else { $c{block}(\%c); } }
+sub died($) { display(RED,shift); die(); }
 sub getName() {
   if($self{name}) {
     my $name;
     ($name = $self{name}) =~ s/ Radio$//gs;
-    return sprintf('[%15.15s] [%3d] ', $name, $self{total})
+    return sprintf('%15.15s [%3d]', $name, $self{total});
   }
-  return '';
+  return sprintf('%15.15s', "Panda");
 }
 sub login($) {
   my $p = shift;
   display(DIM,"Logging in...");
   ${$p} = WebService::Pandora->new(username => $config{email}, password => $config{password});
-  ${$p}->login() or die( ${$p}->error() );
+  ${$p}->login() or died( ${$p}->error() );
 }
 sub writeTags($$) {
   my $track = shift;
@@ -76,7 +77,7 @@ sub thread($) {
     my $result = getPlaylist($pandora, $self{station});
     if ( !$result ) {
       my $error = $pandora->error();
-      if($error =~ /error 13\:/) { login(\$pandora); } else { die $error; }
+      if($error =~ /error 13\:/) { login(\$pandora); } else { died($error); }
     } else {
       my $waitTime = 0;
       for my $track (@{$result->{'items'}}) {
@@ -138,8 +139,8 @@ sub start() {
     display(DIM, "Creating thread for $station->{stationName}");
     mkChild(\@threads,{ name => $station->{stationName}, station => $station->{stationToken}, block => \&thread })
   }
-  display(BLUE, "Panda [Threads: ".(@threads+0)."]");
+  display(BLUE, "[Threads: ".(@threads+0)."]");
   for(@kills) { $SIG{$_} = sub { for (@threads) { kill('TERM', $_); } print "\e[0;0H"."\033[2J"."\e[?25h"; exit 1; }; }
-  while((my $death = waitpid(-1, 0)) and (@threads > 0)) { display(RED,"Thread $death has died. ".(@threads-1)." children left"); @threads = grep { $_ != $death } @threads; }
+  while((my $death = waitpid(-1, 0)) and (@threads > 0)) { display(BLUE, "[Threads: ".(@threads-1)."]"); @threads = grep { $_ != $death } @threads; }
 }
 start();
