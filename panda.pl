@@ -5,7 +5,7 @@ use WebService::Pandora;
 use MP3::Tag;
 use MP3::Info;
 use LWP::Simple;
-use JSON;
+# use JSON;
 use File::Path qw(make_path);
 use Cwd 'abs_path';
 use constant {
@@ -18,7 +18,7 @@ sub clear() { print "\033[2J"; }
 sub sanitize($) { my $text = shift; $text =~ s/[\/]/_/gs; return $text; }
 sub handleError($$) { my ($r, $p) = @_; die $p->error if(!$r); return $r; }
 sub getInput($$) { my $i = shift; print "\e[".YELLOW.'m'.shift.": \e[".RESET."m"; chomp($$i = <STDIN>); }
-sub appendLog($) { open LOG, (">>$config{directory}/log.txt"); print LOG encode_json(shift)."\n"; close LOG; }
+# sub appendLog($) { open LOG, (">>$config{directory}/log.txt"); print LOG encode_json(shift)."\n"; close LOG; }
 sub waitFor($$) { for(my ($wait,$text) = @_; $wait-- > 0; sleep 1) { display(DIM,sprintf($text,toClock($wait))); } }
 sub display($$) { print "\e[0;0H".(($self{line})?"\e[".$self{line}."B\e[K":"")."\e[K\e[".shift.'m'.getName().' '.shift."\e[".RESET."m\n"; }
 sub mkChild($$) { my ($m,%c) = (shift,%{shift()}); $c{line} = @{$m}+1; my $pid = fork; if($pid) { push($m,$pid); } else { $c{block}(\%c); } }
@@ -86,7 +86,7 @@ sub thread($) {
 }
 sub save($) {
   my $track = shift;
-  appendLog($track);
+  # appendLog($track);
   return if !($track->{additionalAudioUrl} && $track->{songName} && $track->{artistName} && $track->{albumName});
   # Make folders
   my $path = join "/", ($config{directory}, sanitize($track->{artistName}), sanitize($track->{albumName}));
