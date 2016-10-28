@@ -5,7 +5,6 @@ use WebService::Pandora;
 use MP3::Tag;
 use MP3::Info;
 use LWP::Simple;
-# use JSON;
 use File::Path qw(make_path);
 use Cwd 'abs_path';
 use constant {
@@ -17,8 +16,8 @@ sub clear() { print "\033[2J"; }
 sub sanitize($) { my $text = shift; $text =~ s/[\/]/_/gs; return $text; }
 sub handleError($$) { my ($r, $p) = @_; died($p->error) if(!$r); return $r; }
 sub toClock($) { my $t = shift; return sprintf('%02s:%02s',int($t/60), $t%60); }
-sub getInput($$) { my $i = shift; print "\e[".YELLOW.'m'.shift.": \e[".RESET."m"; chomp($$i = <STDIN>); }
-# sub appendLog($) { open LOG, (">>$config{directory}/log.txt"); print LOG encode_json(shift)."\n"; close LOG; }
+sub getInput($) {my $i; print "\e[".YELLOW.'m'.shift.": \e[".RESET."m"; chomp($i = <STDIN>); return $i; }
+sub getBool($) { my ($q,$r) = (shift,''); while($r =~ /^$/) { my $i = getInput("$q [y/n]"); $r = ($i=~/^y/i)?1:($i=~/^n/i)?0:''; } return $r; }
 sub waitFor($$) { for(my ($wait,$text) = @_; $wait-- > 0; sleep 1) { display(DIM,sprintf($text,toClock($wait))); } }
 sub display($$) { print "\e[0;0H".(($self{line})?"\e[".$self{line}."B\e[K":"")."\e[K\e[".shift.'m'.getName().' '.shift."\e[".RESET."m\n"; }
 sub mkChild($$) { my ($m,%c) = (shift,%{shift()}); $c{line} = @{$m}+1; my $pid = fork; if($pid) { push($m,$pid); } else { $c{block}(\%c); } }
@@ -112,8 +111,11 @@ sub save($) {
   delete $config{downloading};
   return ($file, $offset);
 }
-sub start() {
-  getConfig(); my $pandora; login(\$pandora);
+
+# Main functions
+
+sub start($) {
+  my $pandora = shift;
   my $result = handleError($pandora->getStationList(), $pandora);
   my @stations = @{$result->{'stations'}};
   for (my $i = 0; $i < @stations; $i++) { print "$i: \e[36m$stations[$i]->{stationName}\e[39m\n"; }
@@ -139,4 +141,25 @@ sub start() {
   for(@kills) { $SIG{$_} = sub { for (@threads) { kill('TERM', $_); } print "\e[0;0H"."\033[2J"."\e[?25h"; exit 1; }; }
   while((my $death = waitpid(-1, 0)) and (@threads > 0)) { display(BLUE, "[Threads: ".(@threads-1)."]"); @threads = grep { $_ != $death } @threads; }
 }
-start()
+sub search() {
+  my $pandora = shift;
+  my $query = getInput("Search for new content");
+  my $result = handleError($pandora->search(searchText => $query), $pandora);
+  for my $type (['songs','song'],['artists','artist'],['genreStations','song']) {
+    next if(!$result->{$$type[0]});
+    for(my $i = 0; $i < @{$result->{$$type[0]}}; $i++) {
+      if(($i != 0) && ($i % 5 == 0)) { last if(!getBool("Continue listing $$type[0]?")); }
+      my $obj = $result->{$$type[0]}[$i];
+      handleError($pandora->createStation(musicToken => $obj->{musicToken},musicType=>$$type[1]), $pandora)
+        if(getBool("Add ".(($obj->{stationName})?$obj->{stationName}:(($obj->{songName})?$obj->{songName}.' by ':'').$obj->{artistName})." to your stations?"));
+    }
+  }
+}
+sub shell() {
+  getConfig(); my $pandora; login(\$pandora);
+  %commands = (
+    start => { description => "Starts the main process.", call => \&start },
+    search => { description => "Searches for and adds new stations.", call => \&search }
+  );
+}
+shell();
