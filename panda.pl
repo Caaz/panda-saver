@@ -13,10 +13,10 @@ use constant {
   LIGHT_GRAY => 37, LIGHT_RED => 91, LIGHT_GREEN => 92, LIGHT_YELLOW => 93, LIGHT_BLUE => 94, LIGHT_MANGENTA => 95, LIGHT_CYAN => 96
 };
 my (%self, %config, @threads);
-sub toClock($) { my $t = shift; return sprintf('%02s:%02s',int($t/60), $t%60); }
 sub clear() { print "\033[2J"; }
 sub sanitize($) { my $text = shift; $text =~ s/[\/]/_/gs; return $text; }
-sub handleError($$) { my ($r, $p) = @_; die $p->error if(!$r); return $r; }
+sub handleError($$) { my ($r, $p) = @_; died($p->error) if(!$r); return $r; }
+sub toClock($) { my $t = shift; return sprintf('%02s:%02s',int($t/60), $t%60); }
 sub getInput($$) { my $i = shift; print "\e[".YELLOW.'m'.shift.": \e[".RESET."m"; chomp($$i = <STDIN>); }
 # sub appendLog($) { open LOG, (">>$config{directory}/log.txt"); print LOG encode_json(shift)."\n"; close LOG; }
 sub waitFor($$) { for(my ($wait,$text) = @_; $wait-- > 0; sleep 1) { display(DIM,sprintf($text,toClock($wait))); } }
@@ -24,7 +24,7 @@ sub display($$) { print "\e[0;0H".(($self{line})?"\e[".$self{line}."B\e[K":"")."
 sub mkChild($$) { my ($m,%c) = (shift,%{shift()}); $c{line} = @{$m}+1; my $pid = fork; if($pid) { push($m,$pid); } else { $c{block}(\%c); } }
 sub died($) { display(RED,shift); die(); }
 sub getName() {
-  if($self{name}) { my $name; ($name = $self{name}) =~ s/ Radio$//gs; return sprintf('%15.15s [%3d/%-3d]', $name, $self{downloaded},$self{skips}); }
+  if($self{name}) { my $name; ($name = $self{name}) =~ s/ Radio$//gs; return sprintf('%15.15s %5d %5d %5d', $name, $self{downloaded},$self{skips},$self{loops}); }
   return sprintf('%15.15s', "Panda");
 }
 sub login($) {
@@ -66,10 +66,12 @@ sub thread($) {
   %self = %{shift()};
   $self{downloaded} = 0;
   $self{skips} = 0;
+  $self{loops} = 0;
   waitFor($self{line}*3, 'Waiting to start. %s');
   my $pandora;
   login(\$pandora);
   while() {
+    $self{loops}++;
     my $result = getPlaylist($pandora, $self{station});
     if ( !$result ) {
       my $error = $pandora->error();
@@ -86,27 +88,23 @@ sub thread($) {
 }
 sub save($) {
   my $track = shift;
-  # appendLog($track);
   return if !($track->{additionalAudioUrl} && $track->{songName} && $track->{artistName} && $track->{albumName});
-  # Make folders
   my $path = join "/", ($config{directory}, sanitize($track->{artistName}), sanitize($track->{albumName}));
   for(make_path($path)) { display(DIM,"Directory Created: $_"); }
-  # URL to download from
   my $url = $track->{additionalAudioUrl};
-  # Get Extension
   my $extension = $url;
   $extension =~ s/^.*(\.[^.]{3})\?.*$/$1/gs;
   $config{downloading} = $path.'/'.sanitize($track->{songName}.$extension);
   my $file = $config{downloading};
   my $offset = 0;
   if(!-e $config{downloading}) {
-    display(GREEN,"Saving $config{downloading}");
+    display(GREEN,"Saving $track->{songName} by $track->{artistName}");
     my $started = time;
     my $rc = getstore($url,$config{downloading});
     if (is_error($rc)) { display(RED,"Download failed with $rc"); }
     else {
       $self{downloaded}++;
-      display(LIGHT_GREEN,"Saved $config{downloading}");
+      display(LIGHT_GREEN,"Saved $track->{songName} by $track->{artistName}");
       writeTags($track,$config{downloading});
       $offset = (time-$started);
     }
@@ -124,7 +122,7 @@ sub start() {
   else {
     print "Input -1 to end adding stations.\n";
     while() {
-      my $choice; getInput(\$choice, "Add a station by number: ");
+      my $choice; getInput(\$choice, "Add a station by number");
       if(($choice >= 0) && ($choice < @stations)) { push(@{$config{stations}},$choice); }
       else { last; }
     }
@@ -137,8 +135,8 @@ sub start() {
     display(DIM, "Creating thread for $station->{stationName}");
     mkChild(\@threads,{ name => $station->{stationName}, station => $station->{stationToken}, block => \&thread })
   }
-  display(BLUE, "[Threads: ".(@threads+0)."]");
+  display(BLUE, "Saved Skips Loops [Threads: ".(@threads+0)." Directory: $config{directory}]");
   for(@kills) { $SIG{$_} = sub { for (@threads) { kill('TERM', $_); } print "\e[0;0H"."\033[2J"."\e[?25h"; exit 1; }; }
   while((my $death = waitpid(-1, 0)) and (@threads > 0)) { display(BLUE, "[Threads: ".(@threads-1)."]"); @threads = grep { $_ != $death } @threads; }
 }
-start();
+start()
