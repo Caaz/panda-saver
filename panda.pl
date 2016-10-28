@@ -11,25 +11,27 @@ use constant {
   RESET => 0, BOLD => 1, DIM => 2, RED => 31, GREEN => 32, YELLOW => 33, BLUE => 34, MAGENTA => 35, CYAN => 36, GRAY => 90,
   LIGHT_GRAY => 37, LIGHT_RED => 91, LIGHT_GREEN => 92, LIGHT_YELLOW => 93, LIGHT_BLUE => 94, LIGHT_MANGENTA => 95, LIGHT_CYAN => 96
 };
-my (%self, %config, @threads);
+my (%self, %config, %commands, @threads);
 sub clear() { print "\033[2J"; }
+sub say($$) { print "\e[".shift.'m'.shift."\e[".RESET."m\n"; }
 sub sanitize($) { my $text = shift; $text =~ s/[\/]/_/gs; return $text; }
 sub handleError($$) { my ($r, $p) = @_; died($p->error) if(!$r); return $r; }
 sub toClock($) { my $t = shift; return sprintf('%02s:%02s',int($t/60), $t%60); }
 sub getInput($) {my $i; print "\e[".YELLOW.'m'.shift.": \e[".RESET."m"; chomp($i = <STDIN>); return $i; }
-sub getBool($) { my ($q,$r) = (shift,''); while($r =~ /^$/) { my $i = getInput("$q [y/n]"); $r = ($i=~/^y/i)?1:($i=~/^n/i)?0:''; } return $r; }
 sub waitFor($$) { for(my ($wait,$text) = @_; $wait-- > 0; sleep 1) { display(DIM,sprintf($text,toClock($wait))); } }
 sub display($$) { print "\e[0;0H".(($self{line})?"\e[".$self{line}."B\e[K":"")."\e[K\e[".shift.'m'.getName().' '.shift."\e[".RESET."m\n"; }
 sub mkChild($$) { my ($m,%c) = (shift,%{shift()}); $c{line} = @{$m}+1; my $pid = fork; if($pid) { push($m,$pid); } else { $c{block}(\%c); } }
+sub getBool($) { my ($q,$r) = (shift,''); while($r =~ /^$/) { my $i = getInput("$q [y/n]"); $r = ($i=~/^y/i)?1:($i=~/^n/i)?0:''; } return $r; }
 sub died($) { display(RED,shift); die(); }
 sub getName() {
   if($self{name}) { my $name; ($name = $self{name}) =~ s/ Radio$//gs; return sprintf('%15.15s %5d %5d %5d', $name, $self{downloaded},$self{skips},$self{loops}); }
   return sprintf('%15.15s', "Panda");
 }
-sub login($) {
-  my $p = shift; display(DIM,"Logging in...");
-  ${$p} = WebService::Pandora->new(username => $config{email}, password => $config{password});
-  ${$p}->login() or died( ${$p}->error() );
+sub login() {
+  display(DIM,"Logging in...");
+  my $p = WebService::Pandora->new(username => $config{email}, password => $config{password});
+  $p->login() or died( $p->error() );
+  return $p;
 }
 sub writeTags($$) {
   my $track = shift; my $mp3 = MP3::Tag->new(shift); $mp3->new_tag("ID3v2");
@@ -52,9 +54,9 @@ sub getPlaylist($$) {
 }
 sub getConfig() {
   MP3::Tag->config(write_v24 => 'TRUE');
-  my @keys = ('directory','email','all');
+  my @keys = ('directory','email');
   for(my $i = 0; $i < @ARGV; $i++){ $config{$keys[$i]} = $ARGV[$i]; }
-  for my $key (@keys) { getInput(\$config{$key},$key) if(!$config{$key}); }
+  for my $key (@keys) { $config{$key} = getInput($key) if(!$config{$key}); }
   print "\e]0;Panda\007"."\e[?25l\e[".YELLOW."mpassword: \e[8m";
   chomp($config{password} = <STDIN>);
   $config{directory} =~ s/^\~/$ENV{HOME}/gs;
@@ -67,14 +69,13 @@ sub thread($) {
   $self{skips} = 0;
   $self{loops} = 0;
   waitFor($self{line}*3, 'Waiting to start. %s');
-  my $pandora;
-  login(\$pandora);
+  my $pandora = login();
   while() {
     $self{loops}++;
     my $result = getPlaylist($pandora, $self{station});
     if ( !$result ) {
       my $error = $pandora->error();
-      if($error =~ /error 13\:/) { login(\$pandora); } else { died($error); }
+      if($error =~ /error 13\:/) { $pandora = login(); } else { died($error); }
     } else {
       my $waitTime = 0;
       for my $track (@{$result->{'items'}}) {
@@ -120,11 +121,11 @@ sub start($) {
   my @stations = @{$result->{'stations'}};
   for (my $i = 0; $i < @stations; $i++) { print "$i: \e[36m$stations[$i]->{stationName}\e[39m\n"; }
   @{$config{stations}} = ();
-  if($config{all}) { @{$config{stations}} = (0..(@stations-1)); }
+  if(getBool("Add all stations?")) { @{$config{stations}} = (0..(@stations-1)); }
   else {
     print "Input -1 to end adding stations.\n";
     while() {
-      my $choice; getInput(\$choice, "Add a station by number");
+      my $choice = getInput("Add a station by number");
       if(($choice >= 0) && ($choice < @stations)) { push(@{$config{stations}},$choice); }
       else { last; }
     }
@@ -139,7 +140,8 @@ sub start($) {
   }
   display(BLUE, "Saved Skips Loops [Threads: ".(@threads+0)." Directory: $config{directory}]");
   for(@kills) { $SIG{$_} = sub { for (@threads) { kill('TERM', $_); } print "\e[0;0H"."\033[2J"."\e[?25h"; exit 1; }; }
-  while((my $death = waitpid(-1, 0)) and (@threads > 0)) { display(BLUE, "[Threads: ".(@threads-1)."]"); @threads = grep { $_ != $death } @threads; }
+  while((@threads > 0) && (my $death = waitpid(-1, 0))) { display(BLUE, "[Threads: ".(@threads-1)."]"); @threads = grep { $_ != $death } @threads; }
+  display(RED, "All threads have died.");
 }
 sub search() {
   my $pandora = shift;
@@ -155,11 +157,20 @@ sub search() {
     }
   }
 }
+sub help() { for my $key (keys %commands) { printf("%10.10s %s\n", $key,$commands{$key}{description}); } }
 sub shell() {
-  getConfig(); my $pandora; login(\$pandora);
-  %commands = (
-    start => { description => "Starts the main process.", call => \&start },
-    search => { description => "Searches for and adds new stations.", call => \&search }
-  );
+  getConfig(); my $pandora = login();
+  help();
+  while(my $command = getInput('Command')) {
+    $command =~ tr[A-Z][a-z];
+    if($commands{$command}) { $commands{$command}{call}($pandora); }
+    else { say(RED,'Invalid Command.'); }
+  }
 }
+
+%commands = (
+  start => { description => "Starts the main process.", call => \&start },
+  search => { description => "Searches for and adds new stations.", call => \&search },
+  help => { description => "Shows all commands and their description.", call => \&help },
+);
 shell();
