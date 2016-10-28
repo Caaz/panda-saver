@@ -30,11 +30,11 @@ Simply run the script and it'll walk you through setting up the configuration.
 Panda now has a shell! Here are the commands.
 - `start`
   - Starts The default process of crawling pandora. It'll ask you if you want to add all stations, if you choose no, you can add individual stations.
-- `search QUERY>`
+- `search QUERY`
   - Searches for music, artists, or genres matching your query. It'll ask you if you want to add each returned item. Every 5 it'll ask if you want to keep going down the list, it tends to be quite long.
 - `help`
   - Lists commands.
-  
+
 ## Errors
 Currently there's only one error it handles, 13: Bad Connectivity. It'll try to re-login and continue downloading. This may or may not be the correct way to handle it. For every other error, a thread will die. Hopefully it'll tell you about that.
 
