@@ -2,6 +2,7 @@
 use warnings;
 use strict;
 use WebService::Pandora;
+use WebService::Pandora::Partner::Android;
 use MP3::Tag;
 use MP3::Info;
 use LWP::Simple;
@@ -29,7 +30,7 @@ sub getName() {
 }
 sub login() {
   display(DIM,"Logging in...");
-  my $p = WebService::Pandora->new(username => $config{email}, password => $config{password});
+  my $p = WebService::Pandora->new(username => $config{email}, password => $config{password},partner => WebService::Pandora::Partner::Android->new());
   $p->login() or died( $p->error() );
   return $p;
 }
