@@ -46,7 +46,7 @@ sub writeTags($$) {
   $mp3->close();
 }
 sub getPlaylist($$) {
-  display(DIM,"Getting playlist.");a
+  display(DIM,"Getting playlist.");
   my ($self,$stationToken) = @_;
   if(!$stationToken) { display(RED,"No stationToken provided."); return; }
   my $method = WebService::Pandora::Method->new(
