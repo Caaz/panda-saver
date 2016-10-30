@@ -26,7 +26,7 @@ sub getBool($) { my ($q,$r) = (shift,''); while($r =~ /^$/) { my $i = getInput("
 sub died($) { display(RED,shift); die(); }
 sub getName() {
   if($self{name}) { my $name; ($name = $self{name}) =~ s/ Radio$//gs; return sprintf('%15.15s %5d %5d %5d', $name, $self{downloaded},$self{skips},$self{loops}); }
-  return sprintf('%15.15s', "Panda");
+  return sprintf('%15.15s %s', 'Panda', 'Saves Skips loops');
 }
 sub login() {
   display(DIM,"Logging in...");
@@ -69,7 +69,7 @@ sub thread($) {
   $self{downloaded} = 0;
   $self{skips} = 0;
   $self{loops} = 0;
-  waitFor($self{line}*3, 'Waiting to start. %s');
+  waitFor($self{line}*5, 'Waiting to start. %s');
   my $pandora = login();
   while() {
     $self{loops}++;
@@ -102,7 +102,7 @@ sub save($) {
     display(GREEN,"Saving $track->{songName} by $track->{artistName}");
     my $started = time;
     my $rc = getstore($url,$config{downloading});
-    if (is_error($rc)) { display(RED,"Download failed with $rc"); }
+    if (is_error($rc)) { display(RED,"Download failed with $rc"); undef $file; }
     else {
       $self{downloaded}++;
       display(LIGHT_GREEN,"Saved $track->{songName} by $track->{artistName}");
@@ -139,9 +139,9 @@ sub start($) {
     display(DIM, "Creating thread for $station->{stationName}");
     mkChild(\@threads,{ name => $station->{stationName}, station => $station->{stationToken}, block => \&thread })
   }
-  display(BLUE, "Saved Skips Loops [Threads: ".(@threads+0)." Directory: $config{directory}]");
+  display(BLUE, "[Threads: ".(@threads+0)." Directory: $config{directory}]");
   for(@kills) { $SIG{$_} = sub { for (@threads) { kill('TERM', $_); } print "\e[0;0H"."\033[2J"."\e[?25h"; exit 1; }; }
-  while((@threads > 0) && (my $death = waitpid(-1, 0))) { display(BLUE, "[Threads: ".(@threads-1)."]"); @threads = grep { $_ != $death } @threads; }
+  while((@threads > 0) && (my $death = waitpid(-1, 0))) { display(BLUE, "[Threads: ".(@threads-1)." Directory: $config{directory}]"); @threads = grep { $_ != $death } @threads; }
   display(RED, "All threads have died.");
 }
 sub search() {
