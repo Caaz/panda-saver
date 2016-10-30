@@ -20,18 +20,24 @@ sub handleError($$) { my ($r, $p) = @_; died($p->error) if(!$r); return $r; }
 sub toClock($) { my $t = shift; return sprintf('%02s:%02s',int($t/60), $t%60); }
 sub getInput($) {my $i; print "\e[".YELLOW.'m'.shift.": \e[".RESET."m"; chomp($i = <STDIN>); return $i; }
 sub waitFor($$) { for(my ($wait,$text) = @_; $wait-- > 0; sleep 1) { display(DIM,sprintf($text,toClock($wait))); } }
-sub display($$) { print "\e[0;0H".(($self{line})?"\e[".$self{line}."B\e[K":"")."\e[K\e[".shift.'m'.getName().' '.shift."\e[".RESET."m\n"; }
+sub display($$) {
+  # Clear second line
+  print "\e[0;0H".(($self{line})?"\e[".($self{line}*2)."B":"")."\e[K";
+  # Clear first line.
+  print "\e[0;0H".(($self{line})?"\e[".($self{line}*2-1)."B":"")."\e[K\e[".shift.'m'.getName().' '.shift."\e[".RESET."m\n";
+}
 sub mkChild($$) { my ($m,%c) = (shift,%{shift()}); $c{line} = @{$m}+1; my $pid = fork; if($pid) { push($m,$pid); } else { $c{block}(\%c); } }
 sub getBool($) { my ($q,$r) = (shift,''); while($r =~ /^$/) { my $i = getInput("$q [y/n]"); $r = ($i=~/^y/i)?1:($i=~/^n/i)?0:''; } return $r; }
-sub died($) { display(RED,shift); die(); }
+sub died($) { display(RED,(split /\n/, shift)[0]); exit; }
 sub getName() {
-  if($self{name}) { my $name; ($name = $self{name}) =~ s/ Radio$//gs; return sprintf('%15.15s %5d %5d %5d', $name, $self{downloaded},$self{skips},$self{loops}); }
-  return sprintf('%15.15s %s', 'Panda', 'Saves Skips loops');
+  if($self{name}) { my $name; ($name = $self{name}) =~ s/ Radio$//gs; return sprintf('%15.15s %5d %5d', $name, $self{downloaded},$self{skips}); }
+  return sprintf('%15.15s %s', 'Panda', 'Saves Skips');
 }
 sub login() {
   display(DIM,"Logging in...");
   my $p = WebService::Pandora->new(username => $config{email}, password => $config{password},partner => WebService::Pandora::Partner::Android->new());
   $p->login() or died( $p->error() );
+  display(LIGHT_GREEN,"Logged in!");
   return $p;
 }
 sub writeTags($$) {
@@ -40,8 +46,9 @@ sub writeTags($$) {
   $mp3->close();
 }
 sub getPlaylist($$) {
+  display(DIM,"Getting playlist.");a
   my ($self,$stationToken) = @_;
-  if ( !defined( $stationToken ) ) { $self->error( 'A stationToken must be specified.' ); return; }
+  if(!$stationToken) { display(RED,"No stationToken provided."); return; }
   my $method = WebService::Pandora::Method->new(
     name => 'station.getPlaylist', partnerAuthToken => $self->{'partnerAuthToken'},
     userAuthToken => $self->{'userAuthToken'}, partnerId => $self->{'partnerId'},
@@ -69,7 +76,7 @@ sub thread($) {
   $self{downloaded} = 0;
   $self{skips} = 0;
   $self{loops} = 0;
-  waitFor($self{line}*5, 'Waiting to start. %s');
+  waitFor(($self{line}-1)*5, 'Waiting to start %s');
   my $pandora = login();
   while() {
     $self{loops}++;
@@ -83,7 +90,7 @@ sub thread($) {
         my ($file,$offset) = save($track);
         $waitTime += get_mp3info($file)->{SECS}-$offset if(defined $file && defined $offset);
       }
-      waitFor($waitTime, 'Simulating playhead. %s');
+      waitFor($waitTime, 'Simulating playhead %s');
     }
   }
 }
@@ -102,7 +109,7 @@ sub save($) {
     display(GREEN,"Saving $track->{songName} by $track->{artistName}");
     my $started = time;
     my $rc = getstore($url,$config{downloading});
-    if (is_error($rc)) { display(RED,"Download failed with $rc"); undef $file; }
+    if (is_error($rc)) { display(RED,"Download failed with $rc"); return; }
     else {
       $self{downloaded}++;
       display(LIGHT_GREEN,"Saved $track->{songName} by $track->{artistName}");
