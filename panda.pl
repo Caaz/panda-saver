@@ -42,7 +42,7 @@ sub login() {
 }
 sub writeTags($$) {
   my $track = shift; my $mp3 = MP3::Tag->new(shift); $mp3->new_tag("ID3v2");
-  $mp3->update_tags({title => $track->{trackName}, artist => $track->{artistName}, album => $track->{albumName},});
+  $mp3->update_tags({title => $track->{songName}, artist => $track->{artistName}, album => $track->{albumName},});
   $mp3->close();
 }
 sub getPlaylist($$) {
