@@ -22,9 +22,9 @@ sub getInput($) {my $i; print "\e[".YELLOW.'m'.shift.": \e[".RESET."m"; chomp($i
 sub waitFor($$) { for(my ($wait,$text) = @_; $wait-- > 0; sleep 1) { display(DIM,sprintf($text,toClock($wait))); } }
 sub display($$) {
   # Clear second line
-  print "\e[0;0H".(($self{line})?"\e[".($self{line}*2)."B":"")."\e[K";
+  # print "\e[0;0H".(($self{line})?"\e[".($self{line}*2)."B":"")."\e[K";
   # Clear first line.
-  print "\e[0;0H".(($self{line})?"\e[".($self{line}*2-1)."B":"")."\e[K\e[".shift.'m'.getName().' '.shift."\e[".RESET."m\n";
+  print "\e[0;0H".(($self{line})?"\e[".($self{line})."B":"")."\e[K\e[".shift.'m'.getName().' '.shift."\e[".RESET."m\n";
 }
 sub mkChild($$) { my ($m,%c) = (shift,%{shift()}); $c{line} = @{$m}+1; my $pid = fork; if($pid) { push($m,$pid); } else { $c{block}(\%c); } }
 sub getBool($) { my ($q,$r) = (shift,''); while($r =~ /^$/) { my $i = getInput("$q [y/n]"); $r = ($i=~/^y/i)?1:($i=~/^n/i)?0:''; } return $r; }
