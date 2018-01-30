@@ -34,5 +34,6 @@ for my $file (@glob) {
     print "OKAY!\n"
   } else {
     print "ERROR!\n";
+    die($@);
   }
 }
