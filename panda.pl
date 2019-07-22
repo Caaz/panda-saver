@@ -26,7 +26,7 @@ sub display($$) {
   # Clear first line.
   print "\e[0;0H".(($self{line})?"\e[".($self{line})."B":"")."\e[K\e[".shift.'m'.getName().' '.shift."\e[".RESET."m\n";
 }
-sub mkChild($$) { my ($m,%c) = (shift,%{shift()}); $c{line} = @{$m}+1; my $pid = fork; if($pid) { push($m,$pid); } else { $c{block}(\%c); } }
+sub mkChild($$) { my ($m,%c) = (shift,%{shift()}); $c{line} = @{$m}+1; my $pid = fork; if($pid) { push(@{$m},$pid); } else { $c{block}(\%c); } }
 sub getBool($) { my ($q,$r) = (shift,''); while($r =~ /^$/) { my $i = getInput("$q [y/n]"); $r = ($i=~/^y/i)?1:($i=~/^n/i)?0:''; } return $r; }
 sub died($) { display(RED,(split /\n/, shift)[0]); exit; }
 sub getName() {
